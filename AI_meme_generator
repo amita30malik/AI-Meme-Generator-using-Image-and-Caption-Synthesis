@@ -1,0 +1,111 @@
+!pip install kaggle transformers torch Pillow
+
+
+#Load Dataset from Kaggle
+
+import zipfile
+import os
+
+# Upload your Kaggle API token file (kaggle.json)
+!mkdir -p ~/.kaggle
+!cp kaggle.json ~/.kaggle/
+!chmod 600 ~/.kaggle/kaggle.json
+
+# Download dataset
+!kaggle datasets download -d abhishtagatya/imgflipscraped-memes-caption-dataset
+!unzip imgflipscraped-memes-caption-dataset.zip -d meme_dataset
+
+#Explore Dataset
+import pandas as pd
+
+df = pd.read_csv('meme_dataset/memes_data.tsv', sep='\t')
+df.head()
+
+
+#Download Meme Images
+import requests
+from PIL import Image
+from io import BytesIO
+
+df['ImageURL'] = df['ImageURL'].apply(lambda url: f"https:{url}" if url.startswith("//") else url)
+
+image_folder = "/content/meme_images"
+os.makedirs(image_folder, exist_ok=True)
+
+for i, row in df['ImageURL'].dropna().sample(10, random_state=42).reset_index(drop=True).items():
+    try:
+        response = requests.get(row, timeout=5)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content))
+            img_path = os.path.join(image_folder, f"meme_{i}.jpg")
+            img.save(img_path)
+            print(f"✅ Saved: {img_path}")
+        else:
+            print(f"❌ Failed: {row}")
+    except Exception as e:
+        print(f"⚠️ Error: {e}")
+
+
+#Add Captions to Memes
+from PIL import ImageDraw, ImageFont
+import textwrap
+
+captions = [
+    "When your code works on the first try 🤯",
+    "How it feels to study all night 😴📚",
+    "When AI takes over your job 🤖💼",
+    "Waiting for the internship result like ⏳",
+    "When you debug for hours and it was a typo 🔍🧠",
+    "The moment you understand recursion 🌀",
+    "Trying to deploy without breaking production 😅",
+    "When Git finally merges without conflict 🤝",
+    "First day at internship vs last day 💼➡️💀",
+    "Me explaining my code vs how it actually works 🧑‍🏫💻"
+]
+
+for i in range(len(captions)):
+    img_path = f"/content/meme_images/meme_{i}.jpg"
+    image = Image.open(img_path)
+    draw = ImageDraw.Draw(image)
+
+    caption = captions[i]
+    wrapped_caption = textwrap.fill(caption, width=30)
+    font = ImageFont.load_default()
+    width, height = image.size
+    margin = 40
+
+    bbox = draw.multiline_textbbox((0, 0), wrapped_caption, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    text_x = (width - text_width) / 2
+    text_y = height - text_height - margin
+
+    draw.rectangle(
+        [(text_x - 10, text_y - 10), (text_x + text_width + 10, text_y + text_height + 10)],
+        fill="black"
+    )
+    draw.multiline_text((text_x, text_y), wrapped_caption, font=font, fill="white", align="center")
+
+    image.save(f"/content/final_meme_{i}.jpg")
+
+
+
+#ZIP Final Output
+import zipfile
+
+with zipfile.ZipFile("/content/final_memes.zip", "w") as zipf:
+    for i in range(len(captions)):
+        file_path = f"/content/final_meme_{i}.jpg"
+        zipf.write(file_path, arcname=f"meme_{i}.jpg")
+
+#Display Generated Memes
+from IPython.display import display
+
+for i in range(len(captions)):
+    print(f"🖼️ Meme {i+1}: {captions[i]}")
+    image = Image.open(f"/content/final_meme_{i}.jpg")
+    display(image)
+
+
+
